@@ -91,10 +91,10 @@ def transfunc(a1x, a1y, a2x, a2y, board, pb, K):
     lb = len(board[0])
     payoff1 = pb[a1y][a1x]
     payoff2 = pb[a2y][a2x]
-    prob = 1/(1 + np.exp(payoff2 - payoff1)/K)
+    prob = 1/(1 + np.exp(payoff1 - payoff2)/K)
 
     # Returns new stragety for agent
-    if random.random() < prob:
+    if random.random() > prob:
         return board[a1y][a1x]
     else:
         return board[a2y][a2x]
