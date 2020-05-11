@@ -1,9 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn.apionly as sns
-from matplotlib.colors import LinearSegmentedColormap
 import time
 import random
+from collections import defaultdict
 
 # Strategy index
 # 0 = C
@@ -88,16 +87,15 @@ def payboard(board, r, gamma):
 
 def transfunc(a1x, a1y, a2x, a2y, board, pb, K):
     # Calculates the probabilty of agent 1 changing strategy to agent 2s strategy
-    lb = len(board[0])
     payoff1 = pb[a1y][a1x]
     payoff2 = pb[a2y][a2x]
     prob = 1/(1 + np.exp(payoff1 - payoff2)/K)
 
     # Returns new stragety for agent
     if random.random() > prob:
-        return board[a1y][a1x]
+        return board[a1y][a1x], False
     else:
-        return board[a2y][a2x]
+        return board[a2y][a2x], True
     
 def adjagent(ax, ay, lb):
     # Selects a random adjecent agent
@@ -114,32 +112,34 @@ def adjagent(ax, ay, lb):
     
 def countstrats(board, strats):
     # Count the occurence of all strategies
-    stratdic = {}
-    for n in strats:
-        stratdic[n] = 0
+    stratdic = {} 
+    stratdic = defaultdict(lambda:0,stratdic)
     for row in board:
         for agent in row:
             stratdic[agent] += 1
     return stratdic
     
 def updateboard(board, pb, ua, K):
-    # 
+    # Updates board after round
     N = len(board[0])
     alist = np.random.choice(N**2, ua, replace=False)
     updatelist = []
+    updateagent = []
     for agent in alist:
         a1y = int(agent/N)
         a1x = agent % N
         a2x, a2y = adjagent(a1x, a1y, N)
-        updatelist.append(transfunc(a1x, a1y, a2x, a2y, board, pb, K))
-    for m in range(ua):
-        agent = alist[m]
-        ay = int(agent/N)
-        ax = agent % N
+        strat, change = transfunc(a1x, a1y, a2x, a2y, board, pb, K)
+        if change:
+            updateagent.append((a1x, a1y))
+            updatelist.append(strat)
+    for m in range(len(updateagent)):
+        ax = updateagent[m][0]
+        ay = updateagent[m][1]
         board[ay][ax] = updatelist[m]
     return board
 
-def plotshow(board, pb:
+def plotshow(board, pb):
     # Shows the strategies on the board
     plt.imshow(board, cmap='viridis', interpolation='nearest')
     plt.colorbar()
@@ -179,7 +179,7 @@ def simulation(N, strats, ua, r, gamma, K, timesteps, interval=1, showinterval=0
     start_time = time.time()
     board, pb = initboard(N, strats, r, gamma, show=False)
     if showinterval:
-        plotshow(board, pb, strats)
+        #plotshow(board, pb, strats)
         print(countstrats(board, strats))
     cp = [[] for _ in range(len(strats))]
     cp = calcprop(board, strats, cp)
@@ -195,10 +195,10 @@ def simulation(N, strats, ua, r, gamma, K, timesteps, interval=1, showinterval=0
             cp = calcprop(board, strats, cp)
         if showinterval:
             if n%showinterval == 0 and n != timesteps:
-                plotshow(board, pb, strats)
+                #plotshow(board, pb, strats)
                 print(countstrats(board, strats))
                 time.sleep(1)
-    plotshow(board, pb, strats)
+    #plotshow(board, pb, strats)
     plt.figure()
     plt.plot(timel, pay)
     plt.show()
@@ -230,29 +230,35 @@ def writetocsv(data, file):
         f.write("\n")
     f.close()
 
-def datasimulation(N, strats, ua, r, gamma, K, timesteps, M, di):
+def datasimulation(N, strats, ua, r, gamma, K, timesteps, Mlist, di):
     # simulation function without plots 
     board, pb = initboard(N, strats, r, gamma, show=False)
     x = []
-    y = []
+    y = [[] for _ in range(len(Mlist))]
+    b = []
     ul = timesteps - di
-    for n in range(1, timesteps+ 1 + M):
+    for n in range(1, timesteps+ 1 + np.max(Mlist)):
         board, pb = nextboard(board, pb, ua, r, gamma, K, show=False)
         if n >= 100 and n % di == 0 and n <= ul:
             x += hflatten(pb)
-        if (n - M) >= 100 and (n - M) % di == 0 and (n - M) <= ul:
-            y.append([np.sum(pb)])
-    return x, y
+            b += hflatten(board)
+        for i in range(len(Mlist)):
+            M = Mlist[i]
+            if (n - M) >= 100 and (n - M) % di == 0 and (n - M) <= ul:
+                y[i].append(np.sum(pb))
+    return x, y, b
 
-def simdata(datapoints, di, N, M, r, gamma):
+def simdata(datapoints, di, N, Mlist, r, gamma):
     # Simulation to extract data
     start_time = time.time()
     nsim = int(datapoints/(1000/di))
     for nm in range(nsim):
         print(str(nm) + "/" + str(nsim))
-        x, y = datasimulation(50, [0, 1, 2, 3, 4, 5, 6, 7, 8], 1250, r, gamma, 0.5, 1100, M, di)
-        writetocsv(x, "TXMAS.csv")
-        writetocsv(y, "TYMAS.csv")
+        x, y, b = datasimulation(50, [0, 1, 2, 3, 4, 5, 6, 7, 8], 1250, r, gamma, 0.5, 1100, Mlist, di)
+        writetocsv(x, "X__MAS.csv")
+        writetocsv(y, "Y__MAS.csv")
+        writetocsv(b, "B__MAS.csv")
     print("--- %s seconds ---" % (time.time() - start_time))
 
-simdata(9000, 4, 50, 10, 2.8, 0.35)
+if __name__ == "__main__":
+    simdata(25000, 4, 50, [1, 2, 3, 4, 5, 10], 2.8, 0.35)
